@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Photobooth – 3-Shot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#1f1a17; --panel:#2b241f; --accent:#d9b48a; --muted:#8b7b6a;
+    }
+    html,body{height:100%;margin:0;font-family: 'Special Elite', monospace;background: radial-gradient(circle at 10% 10%, #2a2321 0%, #0f0c0b 60%);color:var(--accent)}
+    .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:32px}
+    .booth{width:980px;background:linear-gradient(180deg,#3a2f2a 0%, #231a17 100%);border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,0.7);border:6px solid rgba(0,0,0,0.35);display:grid;grid-template-columns: 1fr 360px;gap:18px}
+
+    /* Left: camera */
+    .stage{background:linear-gradient(180deg,#1a1210,#241815);border-radius:12px;padding:16px;position:relative;overflow:hidden}
+    .curtain{position:absolute;inset:0;background-image:linear-gradient(90deg, rgba(0,0,0,0.3), rgba(0,0,0,0));pointer-events:none}
+    video{width:100%;height:400px;object-fit:cover;border-radius:8px;border:6px solid #151010;box-shadow:0 6px 18px rgba(0,0,0,0.6);transform: scaleX(-1);transition:filter 0.3s ease;}
+    .controls{display:flex;align-items:center;gap:10px;margin-top:12px}
+    .btn{background:var(--panel);color:var(--accent);border:2px solid rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;cursor:pointer;box-shadow:inset 0 -3px 0 rgba(0,0,0,0.4);font-family: inherit}
+    .btn:active{transform:translateY(1px)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+
+    .status{font-family:'Playfair Display', serif;color:var(--accent);font-size:18px}
+    .light{width:18px;height:18px;border-radius:9px;background:#2a2a2a;border:1px solid #000;margin-left:10px;box-shadow:0 0 6px rgba(0,0,0,0.7)}
+    .light.on{background:#ffecb3;box-shadow:0 0 12px #ffd76b}
+
+    .countdown{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:96px;color:rgba(255,255,255,0.9);text-shadow:0 8px 30px rgba(0,0,0,0.6);display:none}
+    .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+
+    /* Right: preview & filters */
+    .panel{background:linear-gradient(180deg,#2b231f,#1c1411);border-radius:12px;padding:16px;border:4px solid rgba(0,0,0,0.35)}
+    .strip-preview{background:#0f0b0a;padding:12px;border-radius:8px;display:flex;flex-direction:column;align-items:center}
+    .thumbs{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+    .thumb{width:220px;height:140px;background:#111;border-radius:6px;overflow:hidden;border:4px solid #130f0f}
+    .thumb img{width:100%;height:100%;object-fit:cover}
+
+    label.select{display:flex;gap:8px;align-items:center;margin:8px 0}
+    select, input{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:6px;width:140px}
+
+    .final-actions{display:flex;gap:8px;margin-top:10px}
+    .download{background:var(--accent);color:#2b231f;padding:10px 14px;border-radius:8px;font-weight:700}
+
+    /* Photo strip final style */
+    .final-wrap{margin-top:12px;background:linear-gradient(180deg,#120b09,#1b1110);border-radius:8px;padding:12px;display:flex;align-items:center;justify-content:center}
+
+    /* little retro decor */
+    .title{font-family:'Playfair Display', serif;font-size:28px;text-align:center;color:var(--accent);margin-bottom:8px}
+    .credit{font-size:12px;color:var(--muted);text-align:center;margin-top:6px}
+
+    .custom-inputs{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+
+    @media(max-width:1200px){
+      .booth{width:100%;grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="booth">
+      <div class="stage">
+        <div class="title">Memory Photobooth</div>
+        <video id="video" playsinline autoplay muted></video>
+        <div class="curtain"></div>
+        <div class="countdown" id="countdown">3</div>
+        <div class="flash" id="flash"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+          <div class="controls">
+            <button class="btn" id="startBtn">Start 3-shot</button>
+            <button class="btn" id="retakeBtn" disabled>Retake</button>
+            <button class="btn" id="toggleCam">Pause</button>
+          </div>
+          <div style="display:flex;align-items:center">
+            <div class="status">Status: <span id="statusText">Idle</span></div>
+            <div class="light" id="readyLight" title="Ready light"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:18px;color:var(--accent)">Photo Strip</div>
+          <div style="font-size:12px;color:var(--muted)">3 Photos – customize your strip</div>
+        </div>
+
+        <div class="strip-preview">
+          <div class="custom-inputs">
+            <label class="select">
+              Text:
+              <input type="text" id="namesInput" placeholder="love" value="LOVE">
+            </label>
+
+            <label class="select">
+              Date:
+              <input type="text" id="dateInput" placeholder="Auto" readonly style="background:#1a1210;cursor:not-allowed;">
+            </label>
+
+            <label class="select">
+              Filter:
+              <select id="filterSelect">
+                <option value="none">None (original)</option>
+                <option value="sepia">Sepia</option>
+                <option value="bw">Black & White</option>
+                <option value="vintage">High-Contrast Vintage</option>
+                <option value="film">Film Grain</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="final-actions">
+            <button class="btn" id="previewStrip" disabled>Preview Strip</button>
+            <button class="download" id="downloadBtn" disabled>Download Strip</button>
+          </div>
+
+          <div class="final-wrap" id="finalWrap" style="display:none">
+            <canvas id="finalCanvas" width="400" height="1200" style="max-width:100%"></canvas>
+          </div>
+        </div>
+
+        <div class="credit">Tip: Allow camera access, then click <strong>Start 3-shot</strong> – a countdown appears before each picture.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(async function(){
+  const video = document.getElementById('video');
+  const startBtn = document.getElementById('startBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const toggleCam = document.getElementById('toggleCam');
+  const countdownEl = document.getElementById('countdown');
+  const flash = document.getElementById('flash');
+  const statusText = document.getElementById('statusText');
+  const readyLight = document.getElementById('readyLight');
+  const filterSelect = document.getElementById('filterSelect');
+  const previewStrip = document.getElementById('previewStrip');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const finalWrap = document.getElementById('finalWrap');
+  const finalCanvas = document.getElementById('finalCanvas');
+  const namesInput = document.getElementById('namesInput');
+  const dateInput = document.getElementById('dateInput');
+
+  // Set automatic date
+  const today = new Date();
+  const formattedDate = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getFullYear()}`;
+  dateInput.value = formattedDate;
+
+  let stream;
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
+    video.srcObject = stream;
+    statusText.textContent = 'Camera ready';
+    readyLight.classList.add('on');
+  }catch(e){
+    statusText.textContent = 'Camera blocked or not found';
+    console.error(e);
+    return;
+  }
+
+  let photos = [];
+  let paused = false;
+
+  function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+  toggleCam.addEventListener('click', ()=>{
+    if(!stream) return;
+    paused = !paused;
+    stream.getVideoTracks().forEach(t=>t.enabled = !paused);
+    toggleCam.textContent = paused? 'Resume' : 'Pause';
+  });
+
+  startBtn.addEventListener('click', async ()=>{
+    startBtn.disabled = true; retakeBtn.disabled = true; previewStrip.disabled = true; downloadBtn.disabled = true;
+    photos = [];
+    finalWrap.style.display = 'none';
+
+    for(let i=0;i<3;i++){
+      statusText.textContent = `Get ready – shot ${i+1} of 3`;
+      readyLight.classList.remove('on');
+      await tickCountdown();
+      await doFlash();
+      const img = captureFrame();
+      photos.push(img);
+      statusText.textContent = `Captured ${i+1}/3`;
+      readyLight.classList.add('on');
+      await sleep(800);
+    }
+    statusText.textContent = 'All photos taken';
+    retakeBtn.disabled = false; previewStrip.disabled = false; downloadBtn.disabled = false;
+    startBtn.disabled = false;
+  });
+
+  retakeBtn.addEventListener('click', ()=>{
+    photos=[]; previewStrip.disabled = true; downloadBtn.disabled = true; finalWrap.style.display='none'; statusText.textContent='Ready to start';
+  });
+
+  function addThumb(dataURL){
+    const div = document.createElement('div'); div.className='thumb';
+    const img = document.createElement('img'); img.src=dataURL;
+    div.appendChild(img); thumbs.appendChild(div);
+  }
+
+  function captureFrame(){
+    const w = video.videoWidth || 640; const h = video.videoHeight || 480;
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d');
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -w, 0, w, h);
+    return c.toDataURL('image/jpeg',0.92);
+  }
+
+  async function tickCountdown(){
+    countdownEl.style.display='block';
+    for(let n=3;n>=1;n--){ countdownEl.textContent = n; await sleep(800); }
+    countdownEl.style.display='none';
+  }
+
+  async function doFlash(){
+    flash.style.transition='none'; flash.style.opacity=1; await sleep(80);
+    flash.style.transition='opacity 400ms ease-out'; flash.style.opacity=0; await sleep(200);
+  }
+
+  function applyFilterToCanvas(ctx, imgEl, filter){
+    const w = imgEl.width; const h = imgEl.height; ctx.drawImage(imgEl,0,0,w,h);
+    let imageData = ctx.getImageData(0,0,w,h);
+    let d = imageData.data;
+    if(filter==='sepia'){
+      for(let i=0;i<d.length;i+=4){
+        const r=d[i], g=d[i+1], b=d[i+2];
+        d[i] = Math.min(255, (r*0.393 + g*0.769 + b*0.189));
+        d[i+1] = Math.min(255,(r*0.349+g*0.686+b*0.168));
+        d[i+2] = Math.min(255,(r*0.272+g*0.534+b*0.131));
+      }
+    }else if(filter==='bw'){
+      for(let i=0;i<d.length;i+=4){
+        const avg = (d[i]+d[i+1]+d[i+2])/3;
+        d[i]=d[i+1]=d[i+2]=avg;
+      }
+    }else if(filter==='vintage'){
+      for(let i=0;i<d.length;i+=4){
+        let r=d[i], g=d[i+1], b=d[i+2];
+        d[i] = clamp((r-15)*1.08 + 10);
+        d[i+1] = clamp((g-10)*1.03 + 6);
+        d[i+2] = clamp((b-5)*0.98 - 4);
+      }
+      for(let i=0;i<d.length;i+=4){ d[i]+=6; d[i+1]+=2; }
+    }else if(filter==='film'){
+      for(let i=0;i<d.length;i+=4){
+        const lum = 0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2];
+        d[i]=d[i+1]=d[i+2]=clamp(lum);
+      }
+    }
+    ctx.putImageData(imageData,0,0);
+  }
+
+  function clamp(v){return Math.max(0, Math.min(255, Math.round(v)))}
+
+  previewStrip.addEventListener('click', ()=>{
+    if(photos.length<3) return;
+    renderFinalStrip(filterSelect.value);
+  });
+
+  downloadBtn.addEventListener('click', ()=>{
+    if(photos.length<3) return;
+    renderFinalStrip(filterSelect.value).then(()=>{
+      const link = document.createElement('a'); 
+      link.href = finalCanvas.toDataURL('image/jpeg',0.95); 
+      link.download='photobooth-strip.jpg'; 
+      document.body.appendChild(link); 
+      link.click(); 
+      link.remove();
+    });
+  });
+
+  filterSelect.addEventListener('change', ()=>{
+    applyLiveFilter(filterSelect.value);
+  });
+
+  function applyLiveFilter(filter){
+    if(filter==='sepia'){
+      video.style.filter = 'sepia(80%) contrast(1.1)';
+    }else if(filter==='bw'){
+      video.style.filter = 'grayscale(100%)';
+    }else if(filter==='vintage'){
+      video.style.filter = 'sepia(40%) contrast(1.3) brightness(0.95)';
+    }else if(filter==='film'){
+      video.style.filter = 'grayscale(100%) contrast(1.2)';
+    }else{
+      video.style.filter = 'none';
+    }
+  }
+
+  async function applyFilterToDataURL(dataURL, filter){
+    return new Promise((res)=>{
+      const img = new Image(); img.onload = ()=>{
+        const c = document.createElement('canvas'); c.width=img.width; c.height=img.height; const ctx=c.getContext('2d');
+        applyFilterToCanvas(ctx, img, filter);
+        if(filter==='film' || filter==='vintage') addGrain(ctx, c.width, c.height, filter);
+        res(c.toDataURL('image/jpeg',0.9));
+      };
+      img.src = dataURL;
+    });
+  }
+
+  function addGrain(ctx,w,h,mode){
+    const imgData = ctx.getImageData(0,0,w,h);
+    const d = imgData.data;
+    for(let i=0;i<d.length;i+=4){
+      const noise = (Math.random()-0.5) * (mode==='film'?40:18);
+      d[i] = clamp(d[i]+noise);
+      d[i+1] = clamp(d[i+1]+noise);
+      d[i+2] = clamp(d[i+2]+noise);
+    }
+    ctx.putImageData(imgData,0,0);
+    const g = ctx.createRadialGradient(w/2,h/2,w*0.2,w/2,h/2,w*0.9);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.35)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
+
+  async function renderFinalStrip(filter){
+    const width = 400; 
+    const headerHeight = 120;
+    const footerHeight = 120;
+    const photoAreaHeight = 900;
+    const height = headerHeight + photoAreaHeight + footerHeight;
+    
+    finalCanvas.width = width; 
+    finalCanvas.height = height;
+    const ctx = finalCanvas.getContext('2d');
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    
+    ctx.font = 'bold 32px "Playfair Display", serif';
+    ctx.fillText('MEMORIES', width/2, 45);
+    ctx.font = 'italic 36px "Playfair Display", serif';
+    ctx.fillText('<3', width/2, 85);
+
+    const frameMargin = 30;
+    const frameWidth = width - (frameMargin * 2);
+    const frameHeight = 250;
+    const frameGap = 40;
+    
+    for(let i = 0; i < 3; i++){
+      const img = new Image(); 
+      img.src = photos[i];
+      
+      await new Promise(r => { 
+        img.onload = () => {
+          const y = headerHeight + 20 + i * (frameHeight + frameGap);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(frameMargin - 8, y - 8, frameWidth + 16, frameHeight + 16);
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(frameMargin - 4, y - 4, frameWidth + 8, frameHeight + 8);
+          
+          const tmp = document.createElement('canvas');
+          tmp.width = frameWidth;
+          tmp.height = frameHeight;
+          const tctx = tmp.getContext('2d');
+          
+          const ar = img.width / img.height;
+          const tar = frameWidth / frameHeight;
+          let sw, sh, sx, sy;
+          
+          if(ar > tar) {
+            sh = img.height;
+            sw = Math.round(sh * tar);
+            sx = Math.round((img.width - sw) / 2);
+            sy = 0;
+          } else {
+            sw = img.width;
+            sh = Math.round(sw / tar);
+            sx = 0;
+            sy = Math.round((img.height - sh) / 2);
+          }
+          
+          tctx.drawImage(img, sx, sy, sw, sh, 0, 0, frameWidth, frameHeight);
+          applyFilterToCanvas(tctx, tmp, filter);
+          if(filter === 'film' || filter === 'vintage') {
+            addGrain(tctx, tmp.width, tmp.height, filter);
+          }
+          
+          ctx.drawImage(tmp, frameMargin, y);
+          r();
+        };
+      });
+    }
+
+    const footerY = headerHeight + photoAreaHeight + 20;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.font = 'italic 28px "Playfair Display", serif';
+    ctx.fillText(namesInput.value || 'LOVE', width/2, footerY + 25);
+    ctx.font = '20px "Special Elite", monospace';
+    ctx.fillText(dateInput.value || formattedDate, width/2, footerY + 55);
+
+    finalWrap.style.display = 'flex';
+  }
+
+})();
+
+</script>
+</body>
+</html>
